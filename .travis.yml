@@ -1,14 +1,15 @@
-sudo: false
+#sudo: false
 language: php
 php:
-  - 5.4
-  - 5.5
-  - 5.6
+#  - 5.4
+#  - 5.5
+#  - 5.6
   - 7.0
 addons:
   apt:
     packages:
       - graphviz
+      - gdb
 env:
   global:
     - CORE_BRANCH=master
@@ -16,7 +17,7 @@ env:
     - GH_REF: github.com/owncloud/gallery.git
     - secure: "cLmMqrbVZrvn2GAoVs6JWa5h70tzrAISjPZUfENjl0KYT6B84z3B94W/dGU+I2mxwvyBqEP+x83Bih2CxEflqc7tJmdqC+MM/ZZiigPX7RCjq5XHbzUpPpMbC8MFxT2K3jcFXUitfwZvNaZXJIiK3ZQJU4ayKaegLvI91x1SqH0="
   matrix:
-    - DB=sqlite
+    - DB=mysql
 
 branches:
   only:
@@ -35,16 +36,18 @@ before_cache:
   - cp -r ${TRAVIS_BUILD_DIR}/../core/apps/$APP_NAME/vendor ${TRAVIS_BUILD_DIR}/travis/php-cache/`php-config --vernum`
 
 before_install:
+  - sed -i '/opcache.so/d' ~/.phpenv/versions/$(phpenv version-name)/etc/php.ini
+  - php --modules
   # Setup Selenium
   - export DISPLAY=:99.0
   - sh -e /etc/init.d/xvfb start
   - sleep 3
-  - sh -c "if [ ! -f ${TRAVIS_BUILD_DIR}/travis/lib-cache/selenium.jar ]; then wget -O ${TRAVIS_BUILD_DIR}/travis/lib-cache/selenium.jar https://selenium-release.storage.googleapis.com/2.47/selenium-server-standalone-2.47.0.jar; fi;"
-  - java -jar ${TRAVIS_BUILD_DIR}/travis/lib-cache/selenium.jar -port 4444 >/dev/null 2>&1 & # WARNING - Takes a long time to start up. Keep here
+  - wget -O selenium.jar https://selenium-release.storage.googleapis.com/2.47/selenium-server-standalone-2.47.0.jar
+  - java -jar selenium.jar -port 4444 >/dev/null 2>&1 & # WARNING - Takes a long time to start up. Keep here
 
   # Ghostdriver does not work on Travis - Download the latest PhantomJS
   #- mkdir travis-phantomjs
-  #- sh -c "if [ ! -f ${TRAVIS_BUILD_DIR}/travis/lib-cache/phantomjs.tar.bz2 ]; then wget -O ${TRAVIS_BUILD_DIR}/travis/lib-cache/phantomjs.tar.bz2  https://s3.amazonaws.com/travis-phantomjs/phantomjs-2.0.0-ubuntu-12.04.tar.bz2; fi;"
+  #- sh -c "if [ ! -e ${TRAVIS_BUILD_DIR}/travis/lib-cache/phantomjs.tar.bz2 ]; then wget -O ${TRAVIS_BUILD_DIR}/travis/lib-cache/phantomjs.tar.bz2  https://s3.amazonaws.com/travis-phantomjs/phantomjs-2.0.0-ubuntu-12.04.tar.bz2; fi;"
   #- tar -xvf ${TRAVIS_BUILD_DIR}/travis/lib-cache/phantomjs.tar.bz2
   #- export PATH=${TRAVIS_BUILD_DIR}/travis/lib-cache/phantomjs:$PATH
   #- phantomjs --webdriver=4444 --ignore-ssl-errors=true --webdriver-loglevel=DEBUG &
@@ -82,9 +85,17 @@ before_script:
   # Install a newer xdebug PHP extension
   - sh -c "if [ '$TRAVIS_PHP_VERSION' = '7.0' ]; then cd build; bash xdebug_install.sh; cd ${TRAVIS_BUILD_DIR}/../core/apps/$APP_NAME; fi"
 
+  # Make sure we can retrieve core dumps
+  - ulimit -c unlimited -S
+  - cat /proc/sys/kernel/core_pattern
+  - sh -c "if [ '$TRAVIS_PHP_VERSION' = '7.0' ]; then echo '/tmp/core_%e.%p' | sudo tee /proc/sys/kernel/core_pattern; fi;"
+  - cat /proc/sys/kernel/core_pattern
+
 script:
   # Test lint
   - php vendor/bin/parallel-lint --exclude travis --exclude vendor . vendor/composer vendor/symfony/yaml vendor/autoload.php
+
+  - mkdir travis
 
   # Acceptance tests, using Firefox, without code coverage
   - php vendor/bin/codecept run acceptance --env firefox
@@ -111,13 +122,15 @@ after_success:
 
 after_failure:
   - cat tests/_output/phpbuiltinserver.errors.txt
+  - bash build/after_failure.sh
+  - ls -altrs /tmp
 
 matrix:
   include:
-    - php: 5.4
-      env: DB=mysql
-    - php: 5.4
-      env: DB=pgsql
-    - php: 7.0
-      env: DB=mysql
+#    - php: 5.4
+#      env: DB=mysql
+#    - php: 5.4
+#      env: DB=pgsql
+#    - php: 7.0
+#      env: DB=mysql
   fast_finish: true
