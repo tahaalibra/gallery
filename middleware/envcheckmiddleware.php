@@ -27,6 +27,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\IControllerMethodReflector;
 
 use OCA\Gallery\Environment\Environment;
+use OCP\Share\IManager;
 
 /**
  * Checks that we have a valid token linked to a valid resource and that the
@@ -46,6 +47,8 @@ class EnvCheckMiddleware extends CheckMiddleware {
 	private $environment;
 	/** @var IControllerMethodReflector */
 	protected $reflector;
+
+    protected $shareManager;
 
 	/***
 	 * Constructor
@@ -67,7 +70,8 @@ class EnvCheckMiddleware extends CheckMiddleware {
 		Environment $environment,
 		IControllerMethodReflector $reflector,
 		IURLGenerator $urlGenerator,
-		ILogger $logger
+		ILogger $logger,
+        IManager $shareManager
 	) {
 		parent::__construct(
 			$appName,
@@ -80,6 +84,7 @@ class EnvCheckMiddleware extends CheckMiddleware {
 		$this->session = $session;
 		$this->environment = $environment;
 		$this->reflector = $reflector;
+        $this->shareManager = $shareManager;
 	}
 
 	/**
@@ -147,13 +152,14 @@ class EnvCheckMiddleware extends CheckMiddleware {
 		// Allows a logged in user to access public links
 		\OC_User::setIncognitoMode(true);
 
-		$linkItem = Share::getShareByToken($token, false);
+        // creating an object results in failure....HELP!!
+        $linkItem = $this->shareManager->getShareByToken($token);
 
+		// Checks passed, let's store the linkItem
+        $linkItem = Share::getShareByToken($token, false);
 		$this->checkLinkItemExists($linkItem);
 		$this->checkLinkItemIsValid($linkItem, $token);
 		$this->checkItemType($linkItem);
-
-		// Checks passed, let's store the linkItem
 		return $linkItem;
 	}
 
